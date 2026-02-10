@@ -2,7 +2,7 @@
 
 import pandas as pd
 import re
-from mappings import CATEGORY_CONFIG, VACCINE_ORDER
+from mappings import CATEGORY_CONFIG, VACCINE_ORDER_PATTERNS
 
 # --- CSV PROCESSING LOGIC ---
 
@@ -75,3 +75,4 @@ def create_final_json(uploaded_files):
             }
         })
     return {"metrics": metrics}
+
