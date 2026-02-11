@@ -2,14 +2,47 @@
 import streamlit as st
 import pandas as pd
 import json
+import os
+from dotenv import load_dotenv
 import processor as proc
 from mappings import MAPPING
 
+# Load .env variables
+load_dotenv()
+
 st.set_page_config(page_title="LifeSciences DER Automation Tool", layout="wide")
 
+def check_password():
+    """Returns True if the user had the correct password."""
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
+
+    if st.session_state["authenticated"]:
+        return True
+
+    # Show login form
+    st.title("🔐 Internal Access Required")
+    pwd = st.text_input("Enter Team Password", type="password")
+    
+    if st.button("Login"):
+        if pwd == os.getenv("APP_PASSWORD"):
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password. Please contact the admin.")
+    
+    return False
+
 def main():
-    st.sidebar.title("Navigation")
-    app_choice = st.sidebar.radio("Choose Operation", ["DER JSON Creator", "DER ZIP Data Compiler"])
+    if not check_password():
+        return
+
+    # Sidebar Logout and Navigation
+    if st.sidebar.button("Logout"):
+        st.session_state["authenticated"] = False
+        st.rerun()
+
+    app_choice = st.sidebar.radio("Navigation", ["DER JSON Creator", "DER ZIP Data Compiler"])
     st.title("🧬 LifeSciences DER Automation Tool")
     st.divider()
 
@@ -36,13 +69,13 @@ def run_zip_compiler():
         "5. Age Format Compiler"
     ])
 
-    # Feature descriptions and examples
+    # Dynamic Help text
     help_text = {
-        "1. Basic Output Compiler": "Use this when your CSVs contain separate metrics (e.g. CSV1 has `total_attributed_lives`, CSV2 has `den_shingles_50_59`) and a `customer` column.",
-        "2. Email + Telephone Format": "Use this when columns have contact suffixes (e.g. `count_men_b_actual_patients_with_email`). It creates a 'Category' column in the output.",
-        "3. Provider Type + Email + Contact": "Use this for long-format data containing `provider_type, metric, value, customer`.",
-        "4. Payer + Plan Format": "Use this when data has `prid (Payer ID), prnm (Payer Name), plid (Plan ID), plnm (Plan Name)`.",
-        "5. Age Format Compiler": "Use this when the CSV has `current_age` and a count column. Output transforms ages into columns (0, 1, 2...)."
+        "1. Basic Output Compiler": "Use for multiple CSVs with standard metrics and a 'customer' column.",
+        "2. Email + Telephone Format": "Use for CSVs with contact suffixes (e.g. _patients_with_email).",
+        "3. Provider Type + Email + Contact": "Use for long-format data (provider_type, metric, value).",
+        "4. Payer + Plan Format": "Use for Payer/Plan specific data (prnm, plnm).",
+        "5. Age Format Compiler": "Use for Age analysis (current_age, count). Transforms ages into columns."
     }
     st.info(help_text[feature])
 
@@ -52,6 +85,7 @@ def run_zip_compiler():
         with st.spinner("Processing..."):
             final_df = pd.DataFrame()
             
+            # --- FEATURE LOGIC ---
             if feature == "1. Basic Output Compiler":
                 dfs = [pd.read_csv(f) for f in uploaded_files]
                 final_df = dfs[0]
@@ -82,17 +116,17 @@ def run_zip_compiler():
                 final_df = proc.process_age_format(uploaded_files)
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
+            # --- COLUMN ORDERING ---
             if not final_df.empty:
-                # Universal Column Reordering
                 id_cols = ["customer", "Health System Name", "Category", "Provider Type", "Payer ID", "Payer Name", "Plan ID", "Plan Name"]
                 existing_ids = [c for c in id_cols if c in final_df.columns]
                 metric_cols = sorted([c for c in final_df.columns if c not in existing_ids], key=proc.get_vaccine_sort_key)
                 final_df = final_df[existing_ids + metric_cols]
                 
                 st.dataframe(final_df, use_container_width=True)
-                st.download_button("⬇️ Download Result", final_df.to_csv(index=False), "der_output.csv")
+                st.download_button("⬇️ Download Result", final_df.to_csv(index=False), "der_compiled_output.csv")
             else:
-                st.error("No valid data found in uploaded files.")
+                st.error("No valid data processed. Check file headers.")
 
 if __name__ == "__main__":
     main()
