@@ -10,94 +10,89 @@ def add_health_system_mapping(df, mapping_dict):
     return df
 
 def get_vaccine_sort_key(col_name):
-    # Specific priority for common base columns
-    if "total_attributed_lives" in col_name.lower():
+    col_lower = col_name.lower()
+    if "total_attributed_lives" in col_lower:
         return (-1, 0, col_name)
     
-    for index, vaccine in enumerate(VACCINE_ORDER):
-        if vaccine in col_name.lower():
-            # den_ or count_ gets 0, num_ gets 1
+    for index, pattern in enumerate(VACCINE_ORDER_PATTERNS):
+        if pattern in col_lower:
             prefix_priority = 0 if any(col_name.startswith(p) for p in ["den_", "count_", "a_b_den"]) else 1
             return (index, prefix_priority, col_name)
     return (999, 0, col_name)
 
+def compile_contact_validity(df):
+    records = []
+    contact_suffixes = [v for v in CATEGORY_CONFIG.values() if v != ""]
+    
+    den_cols = [c for c in df.columns if c.startswith("den_")]
+    num_cols = [
+        c for c in df.columns 
+        if c.startswith("num_") and not any(c.endswith(s) for s in contact_suffixes)
+    ]
+
+    for _, row in df.iterrows():
+        for category, suffix in CATEGORY_CONFIG.items():
+            out = {"customer": row["customer"], "Category": category}
+            for den in den_cols:
+                out[den] = row[den] if category == "Total" else 0
+            for num in num_cols:
+                col = num + suffix if suffix else num
+                out[num] = row[col] if col in df.columns else 0
+            records.append(out)
+    return pd.DataFrame(records)
+
 def process_provider_long_format(df):
-    """Logic for Provider Type + Contact (Long Format)"""
     rows = []
-    # Identify which columns are metrics vs categories
     for _, row in df.iterrows():
         m_str, pt_raw, val, cust = str(row['metric']), str(row['provider_type']), row['value'], row['customer']
-        
         found_cat, base_m = None, None
         for cat_name, suffix in CATEGORY_CONFIG.items():
-            if suffix == "" and "_patients_total" in m_str: # Handling the 'Total' logic
-                if m_str.endswith("_patients_total"):
-                    found_cat = "Total"
-                    base_m = m_str.replace("_patients_total", "")
-                    break
-            elif suffix != "" and m_str.lower().endswith(suffix):
-                found_cat = cat_name
-                base_m = m_str[:-len(suffix)]
+            if suffix == "" and "_patients_total" in m_str:
+                found_cat, base_m = "Total", m_str.replace("_patients_total", "")
                 break
-        
+            elif suffix != "" and m_str.lower().endswith(suffix):
+                found_cat, base_m = cat_name, m_str[:-len(suffix)]
+                break
         if not found_cat: continue
-        
-        # Clean provider type (remove base metric prefix if present)
         p_type = pt_raw[len(base_m):].strip("_") if pt_raw.lower().startswith(base_m.lower()) else pt_raw
         rows.append({'customer': cust, 'Category': found_cat, 'Provider Type': p_type.title(), base_m: val})
     
     res = pd.DataFrame(rows)
-    return res.groupby(['customer', 'Health System Name', 'Category', 'Provider Type'], as_index=False).sum() if not res.empty else res
+    if res.empty: return res
+    return res.groupby(['customer', 'Category', 'Provider Type'], as_index=False).sum()
 
 def process_age_format(uploaded_files):
-    """Logic for Age Compiler: Rows are ages, columns are counts"""
-    combined_df = pd.DataFrame()
+    all_pivoted = []
     for f in uploaded_files:
         df = pd.read_csv(f)
-        # Pivot so age becomes columns
-        if 'current_age' in df.columns:
-            # Get the metric name (the column that isn't age or customer)
+        if 'current_age' in df.columns and 'customer' in df.columns:
             metric_col = [c for c in df.columns if c not in ['current_age', 'customer']][0]
-            pivoted = df.pivot(index='customer', columns='current_age', values=metric_col).reset_index()
-            combined_df = pd.concat([combined_df, pivoted], axis=0)
+            pivoted = df.pivot_table(index='customer', columns='current_age', values=metric_col, aggfunc='sum').reset_index()
+            all_pivoted.append(pivoted)
     
-    return combined_df.groupby('customer').sum().reset_index()
-
-# --- JSON/SQL PROCESSING LOGIC ---
+    if not all_pivoted: return pd.DataFrame()
+    final = all_pivoted[0]
+    for d in all_pivoted[1:]:
+        final = pd.merge(final, d, on='customer', how='outer')
+    return final.fillna(0)
 
 def clean_sql_query(file_content):
-    # Remove multi-line comments
     content = re.sub(r"/\*.*?\*/", "", file_content, flags=re.DOTALL)
-    # Remove single-line comments
     content = re.sub(r"--.*?$", "", content, flags=re.MULTILINE)
-    # Collapse whitespace
     return re.sub(r"\s+", " ", content).strip()
 
 def create_final_json(uploaded_files):
     metrics = []
-    excluded_cust = [
-        "kaiser-staging","kpphm-prod","kpphmi-prod",
-        "kpphmi-staging","kpwa-prod","kpwa-staging","jhah-prod"
-    ]
-    
-    for idx, uploaded_file in enumerate(uploaded_files, start=1):
-        raw_content = uploaded_file.read().decode("utf-8")
-        cleaned_query = clean_sql_query(raw_content)
-        
+    excluded_cust = ["kaiser-staging","kpphm-prod","kpphmi-prod","kpphmi-staging","kpwa-prod","kpwa-staging","jhah-prod"]
+    for idx, f in enumerate(uploaded_files, start=1):
+        content = f.read().decode("utf-8")
+        cleaned = clean_sql_query(content)
         metrics.append({
-            "id": idx,
-            "metric": f"DER_{uploaded_file.name.replace('.sql', '')}",
-            "level": "l2",
-            "supported_customers": {
-                "included": [],
-                "excluded": excluded_cust
-            },
+            "id": idx, "metric": f"DER_{f.name.replace('.sql','')}", "level": "l2",
+            "supported_customers": {"included": [], "excluded": excluded_cust},
             "queries": {
-                "snowflake": {"database": "DAP", "schema": "L2", "query": cleaned_query},
-                "postgres": {"database": "postgres", "schema": "l2", "query": cleaned_query}
+                "snowflake": {"database": "DAP", "schema": "L2", "query": cleaned},
+                "postgres": {"database": "postgres", "schema": "l2", "query": cleaned}
             }
         })
     return {"metrics": metrics}
-
-
-
