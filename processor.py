@@ -1,7 +1,7 @@
 # processor.py
 import pandas as pd
 import re
-from mappings import CATEGORY_CONFIG, VACCINE_ORDER
+from mappings import CATEGORY_CONFIG, VACCINE_ORDER_PATTERNS
 
 def add_health_system_mapping(df, mapping_dict):
     df = df.copy()
@@ -98,5 +98,6 @@ def create_final_json(uploaded_files):
             }
         })
     return {"metrics": metrics}
+
 
 
