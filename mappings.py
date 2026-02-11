@@ -65,3 +65,5 @@ VACCINE_ORDER_PATTERNS = [
     "men_abcwy_16_18", "paxlovid", "shingles_actual", "shingles_ls", 
     "men_acwy_actual", "men_b_actual", "men_b_ls"
 ]
+
+AGE_COLUMNS = [str(i) for i in range(101)]    
