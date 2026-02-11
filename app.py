@@ -5,33 +5,31 @@ import json
 import os
 from dotenv import load_dotenv
 import processor as proc
-from mappings import MAPPING
-
-# Load .env variables
-load_dotenv()
+from mappings import APP_PASSWORD, MAPPING
 
 st.set_page_config(page_title="LifeSciences DER Automation Tool", layout="wide")
 
 def check_password():
-    """Returns True if the user had the correct password."""
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
 
     if st.session_state["authenticated"]:
         return True
 
-    # Show login form
     st.title("🔐 Internal Access Required")
     pwd = st.text_input("Enter Team Password", type="password")
     
     if st.button("Login"):
-        if pwd == os.getenv("APP_PASSWORD"):
+        # Comparing against the secret password
+        if pwd == APP_PASSWORD:
             st.session_state["authenticated"] = True
             st.rerun()
         else:
-            st.error("Incorrect password. Please contact the admin.")
-    
+            st.error("Incorrect password.")
     return False
+
+
+
 
 def main():
     if not check_password():
@@ -130,3 +128,4 @@ def run_zip_compiler():
 
 if __name__ == "__main__":
     main()
+
