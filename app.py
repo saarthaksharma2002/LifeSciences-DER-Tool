@@ -36,17 +36,15 @@ def run_zip_compiler():
         "5. Age Format Compiler"
     ])
 
-    # User Guidance
-    if feature == "1. Basic Output Compiler":
-        st.info("**Example:** Use when CSV1 has `total_attributed_lives, customer` and CSV2 has `den_shingles_50_59, customer`.")
-    elif feature == "2. Email + Telephone Format":
-        st.info("**Example:** Use when CSV has columns like `count_men_b_actual_patients_with_email`.")
-    elif feature == "3. Provider Type + Email + Contact":
-        st.info("**Example:** Use when CSV has `provider_type, metric, value, customer`.")
-    elif feature == "4. Payer + Plan Format":
-        st.info("**Example:** Use when CSV has `prid, prnm, plid, plnm, customer`.")
-    elif feature == "5. Age Format Compiler":
-        st.info("**Example:** Use when CSV has `current_age, eligible_patient_count, customer`.")
+    # Feature descriptions and examples
+    help_text = {
+        "1. Basic Output Compiler": "Use this when your CSVs contain separate metrics (e.g. CSV1 has `total_attributed_lives`, CSV2 has `den_shingles_50_59`) and a `customer` column.",
+        "2. Email + Telephone Format": "Use this when columns have contact suffixes (e.g. `count_men_b_actual_patients_with_email`). It creates a 'Category' column in the output.",
+        "3. Provider Type + Email + Contact": "Use this for long-format data containing `provider_type, metric, value, customer`.",
+        "4. Payer + Plan Format": "Use this when data has `prid (Payer ID), prnm (Payer Name), plid (Plan ID), plnm (Plan Name)`.",
+        "5. Age Format Compiler": "Use this when the CSV has `current_age` and a count column. Output transforms ages into columns (0, 1, 2...)."
+    }
+    st.info(help_text[feature])
 
     uploaded_files = st.file_uploader("Upload CSV files", type=["csv"], accept_multiple_files=True)
 
@@ -78,13 +76,14 @@ def run_zip_compiler():
                     common = [c for c in ["prid", "prnm", "plid", "plnm", "customer"] if c in final_df.columns and c in d.columns]
                     final_df = pd.merge(final_df, d, on=common, how="outer")
                 final_df = final_df.rename(columns={"prid":"Payer ID", "prnm":"Payer Name", "plid":"Plan ID", "plnm":"Plan Name"})
+                final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
             elif feature == "5. Age Format Compiler":
                 final_df = proc.process_age_format(uploaded_files)
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
             if not final_df.empty:
-                # Universal Column Ordering
+                # Universal Column Reordering
                 id_cols = ["customer", "Health System Name", "Category", "Provider Type", "Payer ID", "Payer Name", "Plan ID", "Plan Name"]
                 existing_ids = [c for c in id_cols if c in final_df.columns]
                 metric_cols = sorted([c for c in final_df.columns if c not in existing_ids], key=proc.get_vaccine_sort_key)
@@ -93,7 +92,7 @@ def run_zip_compiler():
                 st.dataframe(final_df, use_container_width=True)
                 st.download_button("⬇️ Download Result", final_df.to_csv(index=False), "der_output.csv")
             else:
-                st.error("No data processed. Please check file formats.")
+                st.error("No valid data found in uploaded files.")
 
 if __name__ == "__main__":
     main()
