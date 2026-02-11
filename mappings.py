@@ -1,14 +1,21 @@
 # mappings.py
-import os
+import streamlit as st
 import json
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Streamlit Cloud automatically loads these from the dashboard secrets
+# No need for os.getenv or load_dotenv()
 
-# Get the JSON string from .env and parse it
-mapping_json_str = os.getenv("MAPPING_JSON", "{}")
-MAPPING = json.loads(mapping_json_str)
+try:
+    # Access the secret as if it were an environment variable or dictionary
+    mapping_json_str = st.secrets["MAPPING_JSON"]
+    MAPPING = json.loads(mapping_json_str)
+    APP_PASSWORD = st.secrets["APP_PASSWORD"]
+except Exception as e:
+    st.error("Secrets not found. Please check Streamlit Cloud Settings.")
+    MAPPING = {}
+    APP_PASSWORD = "fallback_password_for_local_only"
+
+
 
 CATEGORY_CONFIG = {
     "Total": "",
@@ -30,4 +37,5 @@ VACCINE_ORDER_PATTERNS = [
     "men_acwy_actual", "men_b_actual", "men_b_ls"
 ]
 AGE_COLUMNS = [str(i) for i in range(101)]    
+
 
