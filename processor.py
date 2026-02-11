@@ -10,34 +10,55 @@ def add_health_system_mapping(df, mapping_dict):
     return df
 
 def get_vaccine_sort_key(col_name):
-    col_lower = col_name.lower()
+    # Fix: Convert col_name to string to avoid AttributeError on integers (Ages)
+    col_str = str(col_name)
+    col_lower = col_str.lower()
+    
+    # Handle numeric column names for Age Format Compiler
+    if col_str.isdigit():
+        return (1000, int(col_str), col_str)
+        
     if "total_attributed_lives" in col_lower:
-        return (-1, 0, col_name)
+        return (-1, 0, col_str)
     
     for index, pattern in enumerate(VACCINE_ORDER_PATTERNS):
         if pattern in col_lower:
-            prefix_priority = 0 if any(col_name.startswith(p) for p in ["den_", "count_", "a_b_den"]) else 1
-            return (index, prefix_priority, col_name)
-    return (999, 0, col_name)
+            # den_ or count_ gets priority 0, num_ gets 1
+            prefix_priority = 0 if any(col_str.startswith(p) for p in ["den_", "count_", "a_b_den"]) else 1
+            return (index, prefix_priority, col_str)
+            
+    return (999, 0, col_str)
 
 def compile_contact_validity(df):
     records = []
-    contact_suffixes = [v for v in CATEGORY_CONFIG.values() if v != ""]
+    suffixes = [s for s in CATEGORY_CONFIG.values() if s != ""]
     
-    den_cols = [c for c in df.columns if c.startswith("den_")]
-    num_cols = [
-        c for c in df.columns 
-        if c.startswith("num_") and not any(c.endswith(s) for s in contact_suffixes)
-    ]
+    # Identify unique base metric names (e.g. 'count_men_b_actual')
+    all_cols = df.columns
+    base_metrics = set()
+    for c in all_cols:
+        if "_patients_" in c:
+            base_metrics.add(c.split("_patients_")[0])
+    
+    # Standalone metrics like den_ or num_ not part of contact breakdown
+    standalone_metrics = [c for c in all_cols if (c.startswith("den_") or c.startswith("num_")) and "_patients_" not in c]
 
     for _, row in df.iterrows():
         for category, suffix in CATEGORY_CONFIG.items():
-            out = {"customer": row["customer"], "Category": category}
-            for den in den_cols:
-                out[den] = row[den] if category == "Total" else 0
-            for num in num_cols:
-                col = num + suffix if suffix else num
-                out[num] = row[col] if col in df.columns else 0
+            out = {"customer": row.get("customer", ""), "Category": category}
+            
+            for bm in base_metrics:
+                # 'Total' category often maps to '_patients_total' suffix in raw files
+                search_suffix = suffix
+                if category == "Total":
+                    search_suffix = "_patients_total" if f"{bm}_patients_total" in df.columns else ""
+                
+                col_name = f"{bm}{search_suffix}"
+                out[bm] = row[col_name] if col_name in df.columns else 0
+            
+            for sm in standalone_metrics:
+                out[sm] = row[sm] if category == "Total" else 0
+                
             records.append(out)
     return pd.DataFrame(records)
 
@@ -71,10 +92,8 @@ def process_age_format(uploaded_files):
             all_pivoted.append(pivoted)
     
     if not all_pivoted: return pd.DataFrame()
-    final = all_pivoted[0]
-    for d in all_pivoted[1:]:
-        final = pd.merge(final, d, on='customer', how='outer')
-    return final.fillna(0)
+    final = pd.concat(all_pivoted, ignore_index=True).fillna(0)
+    return final.groupby('customer').sum().reset_index()
 
 def clean_sql_query(file_content):
     content = re.sub(r"/\*.*?\*/", "", file_content, flags=re.DOTALL)
