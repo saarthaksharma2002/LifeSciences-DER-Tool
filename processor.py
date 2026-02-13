@@ -6,7 +6,14 @@ from mappings import CATEGORY_CONFIG, VACCINE_ORDER_PATTERNS, POWERBI_ORDER
 def add_health_system_mapping(df, mapping_dict):
     df = df.copy()
     if "customer" in df.columns:
-        df.insert(1, "Health System Name", df["customer"].map(mapping_dict).fillna(""))
+        mapping_values = df["customer"].map(mapping_dict).fillna("")
+        
+        if "Health System Name" in df.columns:
+            # If it already exists, just update the values
+            df["Health System Name"] = mapping_values
+        else:
+            # If it doesn't exist, insert it at the preferred position (index 1)
+            df.insert(1, "Health System Name", mapping_values)
     return df
 
 def get_vaccine_sort_key(col_name):
@@ -128,3 +135,4 @@ def create_final_json(uploaded_files):
             }
         })
     return {"metrics": metrics}
+
