@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import json
 import processor as proc
-from mappings import  MAPPING
+from mappings import APP_PASSWORD, MAPPING
 
 st.set_page_config(page_title="LifeSciences DER Automation Tool", layout="wide")
 
@@ -151,4 +151,5 @@ def run_zip_compiler():
 
 if __name__ == "__main__":
     main()
+
 
