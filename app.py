@@ -3,7 +3,7 @@ import streamlit as st
 import pandas as pd
 import json
 import processor as proc
-from mappings import  MAPPING
+from mappings import APP_PASSWORD, MAPPING
 
 st.set_page_config(page_title="LifeSciences DER Automation Tool", layout="wide")
 
@@ -67,8 +67,8 @@ def run_zip_compiler():
     # Dynamic Help text
     help_text = {
         "1. Basic Output Compiler": "Use for multiple CSVs with standard metrics and a 'customer' column.",
-        "2. Email + Telephone Format": "Use for CSVs with contact suffixes (e.g. _patients_with_email).",
-        "3. PowerBi dashboard input table": "Generates a compiled output with a specific strict column order for PowerBi ingestion.",
+        "2. Email + Telephone Format": "Use for CSVs with contact suffixes (Generates 7 rows per customer).",
+        "3. PowerBi dashboard input table": "Performs column reordering ONLY. Maintains original row count (1 row per customer).",
         "4. Provider Type + Email + Contact": "Use for long-format data (provider_type, metric, value).",
         "5. Payer + Plan Format": "Use for Payer/Plan specific data (prnm, plnm).",
         "6. Age Format Compiler": "Use for Age analysis (current_age, count). Transforms ages into columns."
@@ -82,24 +82,44 @@ def run_zip_compiler():
             final_df = pd.DataFrame()
             
             # --- FEATURE LOGIC ---
-            if feature == "1. Basic Output Compiler":
+
+            # FEATURE 3: PowerBi - STRICT REORDERING ONLY (1 row per customer)
+            if feature == "3. PowerBi dashboard input table":
+                dfs = [pd.read_csv(f) for f in uploaded_files]
+                final_df = dfs[0]
+                for d in dfs[1:]:
+                    final_df = pd.merge(final_df, d, on="customer", how="outer")
+                
+                final_df = proc.add_health_system_mapping(final_df, MAPPING)
+                
+                # Insert 'Category' if missing to match PowerBi schema requirements
+                if "Category" not in final_df.columns:
+                    final_df.insert(2, "Category", "Total")
+                
+                # Strict Reordering logic from processor.py
+                final_df = proc.reorder_powerbi_columns(final_df)
+
+            # FEATURE 1: Basic Compiler
+            elif feature == "1. Basic Output Compiler":
                 dfs = [pd.read_csv(f) for f in uploaded_files]
                 final_df = dfs[0]
                 for d in dfs[1:]:
                     final_df = pd.merge(final_df, d, on="customer", how="outer")
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
-            elif feature in ["2. Email + Telephone Format", "3. PowerBi dashboard input table"]:
-                # Both features use the contact validity compiler
+            # FEATURE 2: Email + Telephone (The 7-row breakdown logic)
+            elif feature == "2. Email + Telephone Format":
                 combined = pd.concat([pd.read_csv(f) for f in uploaded_files], axis=0).fillna(0)
                 final_df = proc.compile_contact_validity(combined)
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
+            # FEATURE 4: Provider Long Format
             elif feature == "4. Provider Type + Email + Contact":
                 raw_df = pd.concat([pd.read_csv(f) for f in uploaded_files], axis=0)
                 final_df = proc.process_provider_long_format(raw_df)
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
+            # FEATURE 5: Payer + Plan
             elif feature == "5. Payer + Plan Format":
                 dfs = [pd.read_csv(f) for f in uploaded_files]
                 final_df = dfs[0]
@@ -109,22 +129,21 @@ def run_zip_compiler():
                 final_df = final_df.rename(columns={"prid":"Payer ID", "prnm":"Payer Name", "plid":"Plan ID", "plnm":"Plan Name"})
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
+            # FEATURE 6: Age Compiler
             elif feature == "6. Age Format Compiler":
                 final_df = proc.process_age_format(uploaded_files)
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
-            # --- COLUMN ORDERING ---
+            # --- FINAL OUTPUT RENDERING ---
             if not final_df.empty:
-                if feature == "3. PowerBi dashboard input table":
-                    # Use the special strict ordering logic
-                    final_df = proc.reorder_powerbi_columns(final_df)
-                else:
-                    # Use standard smart sorting for all other features
+                # We skip standard sorting for Feature 3 as it was already ordered strictly
+                if feature != "3. PowerBi dashboard input table":
                     id_cols = ["customer", "Health System Name", "Category", "Provider Type", "Payer ID", "Payer Name", "Plan ID", "Plan Name"]
                     existing_ids = [c for c in id_cols if c in final_df.columns]
                     metric_cols = sorted([c for c in final_df.columns if c not in existing_ids], key=proc.get_vaccine_sort_key)
                     final_df = final_df[existing_ids + metric_cols]
                 
+                st.write(f"Total Rows: {len(final_df)}")
                 st.dataframe(final_df, use_container_width=True)
                 st.download_button("⬇️ Download Result", final_df.to_csv(index=False), "der_compiled_output.csv")
             else:
@@ -132,4 +151,3 @@ def run_zip_compiler():
 
 if __name__ == "__main__":
     main()
-
