@@ -1,7 +1,7 @@
 # processor.py
 import pandas as pd
 import re
-from mappings import CATEGORY_CONFIG, VACCINE_ORDER_PATTERNS
+from mappings import CATEGORY_CONFIG, VACCINE_ORDER_PATTERNS, POWERBI_ORDER
 
 def add_health_system_mapping(df, mapping_dict):
     df = df.copy()
@@ -29,11 +29,24 @@ def get_vaccine_sort_key(col_name):
             
     return (999, 0, col_str)
 
+def reorder_powerbi_columns(df):
+    """
+    Specifically for the PowerBi feature: orders columns exactly as requested.
+    """
+    fixed_headers = ["customer", "Health System Name", "Category"]
+    
+    # Identify which columns from our requested PowerBi order actually exist in the data
+    ordered_metrics = [c for c in POWERBI_ORDER if c in df.columns]
+    
+    # Identify any columns that weren't in our list but are in the DF (safety catch)
+    other_cols = [c for c in df.columns if c not in fixed_headers and c not in ordered_metrics]
+    
+    return df[fixed_headers + ordered_metrics + other_cols]
+
 def compile_contact_validity(df):
     records = []
-    suffixes = [s for s in CATEGORY_CONFIG.values() if s != ""]
     
-    # Identify unique base metric names (e.g. 'count_men_b_actual')
+    # Identify unique base metric names
     all_cols = df.columns
     base_metrics = set()
     for c in all_cols:
@@ -41,14 +54,13 @@ def compile_contact_validity(df):
             base_metrics.add(c.split("_patients_")[0])
     
     # Standalone metrics like den_ or num_ not part of contact breakdown
-    standalone_metrics = [c for c in all_cols if (c.startswith("den_") or c.startswith("num_")) and "_patients_" not in c]
+    standalone_metrics = [c for c in all_cols if (c.startswith("den_") or c.startswith("num_") or c.startswith("a_b_den") or c.startswith("count_") or c.startswith("common_")) and "_patients_" not in c]
 
     for _, row in df.iterrows():
         for category, suffix in CATEGORY_CONFIG.items():
             out = {"customer": row.get("customer", ""), "Category": category}
             
             for bm in base_metrics:
-                # 'Total' category often maps to '_patients_total' suffix in raw files
                 search_suffix = suffix
                 if category == "Total":
                     search_suffix = "_patients_total" if f"{bm}_patients_total" in df.columns else ""
@@ -57,6 +69,7 @@ def compile_contact_validity(df):
                 out[bm] = row[col_name] if col_name in df.columns else 0
             
             for sm in standalone_metrics:
+                # Standalone metrics (totals) only appear in the 'Total' category row
                 out[sm] = row[sm] if category == "Total" else 0
                 
             records.append(out)
