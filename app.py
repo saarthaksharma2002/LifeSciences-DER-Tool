@@ -83,20 +83,25 @@ def run_zip_compiler():
             
             # --- FEATURE LOGIC ---
 
-            # FEATURE 3: PowerBi - STRICT REORDERING ONLY (1 row per customer)
+           # FEATURE 3: PowerBi - STRICT REORDERING ONLY 
             if feature == "3. PowerBi dashboard input table":
                 dfs = [pd.read_csv(f) for f in uploaded_files]
                 final_df = dfs[0]
                 for d in dfs[1:]:
-                    final_df = pd.merge(final_df, d, on="customer", how="outer")
+                    # Identify common columns to avoid duplicate columns like Health System Name_x, _y
+                    common_cols = [c for c in d.columns if c in final_df.columns and c != 'customer']
+                    # Drop duplicates from the new dataframe before merging
+                    d_to_merge = d.drop(columns=common_cols)
+                    final_df = pd.merge(final_df, d_to_merge, on="customer", how="outer")
                 
+                # This will now safely handle existing columns
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
                 
-                # Insert 'Category' if missing to match PowerBi schema requirements
+                # Safely handle 'Category'
                 if "Category" not in final_df.columns:
                     final_df.insert(2, "Category", "Total")
                 
-                # Strict Reordering logic from processor.py
+                # Strict Reordering logic
                 final_df = proc.reorder_powerbi_columns(final_df)
 
             # FEATURE 1: Basic Compiler
@@ -151,5 +156,6 @@ def run_zip_compiler():
 
 if __name__ == "__main__":
     main()
+
 
 
