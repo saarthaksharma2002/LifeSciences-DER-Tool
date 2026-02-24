@@ -19,7 +19,6 @@ def check_password():
     pwd = st.text_input("Enter Team Password", type="password")
     
     if st.button("Login"):
-        # Comparing against the secret password stored in Streamlit Secrets
         if pwd == APP_PASSWORD:
             st.session_state["authenticated"] = True
             st.rerun()
@@ -31,7 +30,6 @@ def main():
     if not check_password():
         return
 
-    # Sidebar Logout and Navigation
     if st.sidebar.button("Logout"):
         st.session_state["authenticated"] = False
         st.rerun()
@@ -64,10 +62,9 @@ def run_zip_compiler():
         "6. Age Format Compiler"
     ])
 
-    # Dynamic Help text
     help_text = {
         "1. Basic Output Compiler": "Use for multiple CSVs with standard metrics and a 'customer' column.",
-        "2. Email + Telephone Format": "Use for CSVs with contact suffixes (Generates 7 rows per customer).",
+        "2. Email + Telephone Format": "Merge multiple files and generate 7 rows per customer based on contact validity.",
         "3. PowerBi dashboard input table": "Performs column reordering ONLY. Maintains original row count (1 row per customer).",
         "4. Provider Type + Email + Contact": "Use for long-format data (provider_type, metric, value).",
         "5. Payer + Plan Format": "Use for Payer/Plan specific data (prnm, plnm).",
@@ -83,48 +80,35 @@ def run_zip_compiler():
             
             # --- FEATURE LOGIC ---
 
-           # FEATURE 3: PowerBi - STRICT REORDERING ONLY 
-            if feature == "3. PowerBi dashboard input table":
+            # FEATURE 1, 2, and 3 now all use MERGE to prevent row repetition
+            if feature in ["1. Basic Output Compiler", "2. Email + Telephone Format", "3. PowerBi dashboard input table"]:
                 dfs = [pd.read_csv(f) for f in uploaded_files]
-                final_df = dfs[0]
+                merged_raw = dfs[0]
                 for d in dfs[1:]:
-                    # Identify common columns to avoid duplicate columns like Health System Name_x, _y
-                    common_cols = [c for c in d.columns if c in final_df.columns and c != 'customer']
-                    # Drop duplicates from the new dataframe before merging
+                    # Identify common columns to avoid duplicates (except 'customer')
+                    common_cols = [c for c in d.columns if c in merged_raw.columns and c != 'customer']
                     d_to_merge = d.drop(columns=common_cols)
-                    final_df = pd.merge(final_df, d_to_merge, on="customer", how="outer")
+                    merged_raw = pd.merge(merged_raw, d_to_merge, on="customer", how="outer")
                 
-                # This will now safely handle existing columns
-                final_df = proc.add_health_system_mapping(final_df, MAPPING)
+                if feature == "1. Basic Output Compiler":
+                    final_df = proc.add_health_system_mapping(merged_raw, MAPPING)
                 
-                # Safely handle 'Category'
-                if "Category" not in final_df.columns:
-                    final_df.insert(2, "Category", "Total")
+                elif feature == "2. Email + Telephone Format":
+                    # Fix: Process the merged wide dataframe to generate the 7 category rows
+                    final_df = proc.compile_contact_validity(merged_raw.fillna(0))
+                    final_df = proc.add_health_system_mapping(final_df, MAPPING)
                 
-                # Strict Reordering logic
-                final_df = proc.reorder_powerbi_columns(final_df)
+                elif feature == "3. PowerBi dashboard input table":
+                    final_df = proc.add_health_system_mapping(merged_raw, MAPPING)
+                    if "Category" not in final_df.columns:
+                        final_df.insert(2, "Category", "Total")
+                    final_df = proc.reorder_powerbi_columns(final_df)
 
-            # FEATURE 1: Basic Compiler
-            elif feature == "1. Basic Output Compiler":
-                dfs = [pd.read_csv(f) for f in uploaded_files]
-                final_df = dfs[0]
-                for d in dfs[1:]:
-                    final_df = pd.merge(final_df, d, on="customer", how="outer")
-                final_df = proc.add_health_system_mapping(final_df, MAPPING)
-
-            # FEATURE 2: Email + Telephone (The 7-row breakdown logic)
-            elif feature == "2. Email + Telephone Format":
-                combined = pd.concat([pd.read_csv(f) for f in uploaded_files], axis=0).fillna(0)
-                final_df = proc.compile_contact_validity(combined)
-                final_df = proc.add_health_system_mapping(final_df, MAPPING)
-
-            # FEATURE 4: Provider Long Format
             elif feature == "4. Provider Type + Email + Contact":
                 raw_df = pd.concat([pd.read_csv(f) for f in uploaded_files], axis=0)
                 final_df = proc.process_provider_long_format(raw_df)
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
-            # FEATURE 5: Payer + Plan
             elif feature == "5. Payer + Plan Format":
                 dfs = [pd.read_csv(f) for f in uploaded_files]
                 final_df = dfs[0]
@@ -134,14 +118,12 @@ def run_zip_compiler():
                 final_df = final_df.rename(columns={"prid":"Payer ID", "prnm":"Payer Name", "plid":"Plan ID", "plnm":"Plan Name"})
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
-            # FEATURE 6: Age Compiler
             elif feature == "6. Age Format Compiler":
                 final_df = proc.process_age_format(uploaded_files)
                 final_df = proc.add_health_system_mapping(final_df, MAPPING)
 
             # --- FINAL OUTPUT RENDERING ---
             if not final_df.empty:
-                # We skip standard sorting for Feature 3 as it was already ordered strictly
                 if feature != "3. PowerBi dashboard input table":
                     id_cols = ["customer", "Health System Name", "Category", "Provider Type", "Payer ID", "Payer Name", "Plan ID", "Plan Name"]
                     existing_ids = [c for c in id_cols if c in final_df.columns]
@@ -156,6 +138,3 @@ def run_zip_compiler():
 
 if __name__ == "__main__":
     main()
-
-
-
