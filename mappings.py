@@ -4,7 +4,7 @@ import json
 
 
 try:
-    # Access the secret as if it were an environment variable or dictionary
+    # Access the secret as if it were an environmeningococcalt variable or dictionary
     mapping_json_str = st.secrets["MAPPING_JSON"]
     MAPPING = json.loads(mapping_json_str)
     APP_PASSWORD = st.secrets["APP_PASSWORD"]
@@ -34,13 +34,13 @@ POWERBI_ORDER = [
     "num_pneumococcal_50_plus", "den_pneumococcal_50_64", "num_pneumococcal_50_64", 
     "den_pneumococcal_65_plus", "num_pneumococcal_65_plus", "den_influenza_50_plus", 
     "num_influenza_50_plus", "den_covid_65_plus", "num_covid_65_plus", 
-    "den_rsv_60_plus", "num_rsv_60_plus", "den_meningococcal_16_18", 
-    "num_men_b_acwy_abcwy_16_18", "den_meningococcal_19_23", "num_men_b_acwy_abcwy_19_23", 
-    "num_men_acwy_abcwy_16_18", "num_men_acwy_abcwy_19_23", "num_men_b_16_18", 
-    "num_men_b_19_23", "num_men_acwy_16_18", "num_men_acwy_19_23", 
-    "num_men_abcwy_16_18", "num_men_abcwy_19_23", "a_b_den_paxlovid", 
-    "b_num_paxlovid", "count_shingles_ls", "count_men_acwy_actual", 
-    "count_men_b_ls", "common_patients_eligible_for_both"
+    "den_rsv_60_plus", "num_rsv_60_plus", "den_meningococcalingococcal_16_18", 
+    "num_meningococcal_b_acwy_abcwy_16_18", "den_meningococcalingococcal_19_23", "num_meningococcal_b_acwy_abcwy_19_23", 
+    "num_meningococcal_acwy_abcwy_16_18", "num_meningococcal_acwy_abcwy_19_23", "num_meningococcal_b_16_18", 
+    "num_meningococcal_b_19_23", "num_meningococcal_acwy_16_18", "num_meningococcal_acwy_19_23", 
+    "num_meningococcal_abcwy_16_18", "num_meningococcal_abcwy_19_23", "a_b_den_paxlovid", 
+    "b_num_paxlovid", "count_shingles_ls", "count_meningococcal_acwy_actual", 
+    "count_meningococcal_b_ls", "common_patients_eligible_for_both"
 ]
 
 VACCINE_ORDER_PATTERNS = [
@@ -48,12 +48,13 @@ VACCINE_ORDER_PATTERNS = [
     "shingles_60_64", "shingles_65_plus", "rsv_covid_60_64", "rsv_covid_65_74", 
     "rsv_covid_75_plus", "pnuemococcal_50_plus","pneumococcal_50_plus", "pnuemococcal_50_64","pneumococcal_50_64", 
     "pnuemococcal_65_plus","pneumococcal_65_plus", "influenza_50_plus","influenza_50", "covid_65_plus", "rsv_60_plus",
-    "men_b_acwy_abcwy_16_18","men_b_acwy_abcwy_19_23", "men_acwy_abcwy_16_18","men_acwy_abcwy_19_23", "men_b_16_18","men_b_19_23", "men_acwy_16_18",
-    "men_acwy_19_23",
-    "men_abcwy_16_18","men_abcwy_19_23", "paxlovid", "shingles_actual", "shingles_ls", 
-    "men_acwy_actual", "men_b_actual", "men_b_ls"
+    "meningococcal_b_acwy_abcwy_16_18","meningococcal_b_acwy_abcwy_19_23", "meningococcal_acwy_abcwy_16_18","meningococcal_acwy_abcwy_19_23", "meningococcal_b_16_18","meningococcal_b_19_23", "meningococcal_acwy_16_18",
+    "meningococcal_acwy_19_23",
+    "meningococcal_abcwy_16_18","meningococcal_abcwy_19_23", "paxlovid", "shingles_actual", "shingles_ls", 
+    "meningococcal_acwy_actual", "meningococcal_b_actual", "meningococcal_b_ls"
 ]
 AGE_COLUMNS = [str(i) for i in range(101)]    
+
 
 
 
